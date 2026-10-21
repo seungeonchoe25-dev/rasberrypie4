@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 등교 준비 스마트미러</title>
+<style>
+  :root {
+    --bg: #000000;
+    --ink: #f2f4f6;
+    --ink-dim: #7d858c;
+    --accent: #8ecae6;
+    --accent-dim: #3a4b52;
+    --ring: rgba(142, 202, 230, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    color: var(--ink);
+    padding: 6vh 6vw;
+  }
+
+  .clock-wrap {
+    text-align: center;
+  }
+
+  .clock {
+    font-family: 'Courier New', monospace;
+    font-weight: 200;
+    font-size: clamp(48px, 9vw, 92px);
+    letter-spacing: 4px;
+    color: var(--ink);
+    line-height: 1;
+  }
+
+  .date {
+    margin-top: 10px;
+    font-size: clamp(14px, 2vw, 18px);
+    color: var(--ink-dim);
+    letter-spacing: 2px;
+  }
+
+  .weather {
+    margin-top: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: clamp(15px, 2.2vw, 19px);
+    color: var(--ink);
+  }
+
+  .weather .icon { font-size: 1.3em; }
+  .weather .temp { font-weight: 300; letter-spacing: 1px; }
+  .weather .place {
+    color: var(--ink-dim);
+    font-size: 0.75em;
+    letter-spacing: 1px;
+  }
+
+  .center-stage {
+    flex: 1;
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 18px;
+  }
+
+  .status {
+    font-size: clamp(15px, 2.2vw, 19px);
+    color: var(--ink-dim);
+    min-height: 24px;
+    transition: color 0.3s ease;
+  }
+
+  .status.listening { color: var(--accent); }
+
+  .question {
+    font-size: clamp(17px, 2.6vw, 22px);
+    color: var(--ink-dim);
+    font-style: italic;
+    min-height: 30px;
+  }
+
+  .answer {
+    font-size: clamp(22px, 3.4vw, 30px);
+    font-weight: 300;
+    line-height: 1.5;
+    min-height: 40px;
+  }
+
+  .mic-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+  }
+
+  .mic-button {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    border: 1px solid var(--accent-dim);
+    background: #0a0a0a;
+    color: var(--accent);
+    font-size: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.25s ease, transform 0.15s ease;
+  }
+
+  .mic-button:active { transform: scale(0.94); }
+
+  .mic-button.listening {
+    border-color: var(--accent);
+  }
+
+  .mic-button.listening::before,
+  .mic-button.listening::after {
+    content: "";
+    position: absolute;
+    inset: -14px;
+    border-radius: 50%;
+    border: 1px solid var(--ring);
+    animation: pulse 1.6s ease-out infinite;
+  }
+
+  .mic-button.listening::after {
+    animation-delay: 0.8s;
+  }
+
+  @keyframes pulse {
+    0%   { transform: scale(0.85); opacity: 0.9; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+
+  .hint {
+    font-size: 13px;
+    color: var(--ink-dim);
+    letter-spacing: 1px;
+  }
+
+  .unsupported {
+    max-width: 480px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--ink-dim);
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+  <div class="clock-wrap">
+    <div class="clock" id="clock">00:00:00</div>
+    <div class="date" id="date">-</div>
+    <div class="weather">
+      <span class="icon" id="weatherIcon">⛅</span>
+      <span class="temp" id="weatherTemp">21°C</span>
+      <span class="place">강원도 정선군 · 구름많음</span>
+    </div>
+  </div>
+
+  <div class="center-stage">
+    <div class="status" id="status">터치해서 오늘 옷차림을 물어보세요</div>
+    <div class="question" id="question"></div>
+    <div class="answer" id="answer"></div>
+  </div>
+
+  <div class="mic-zone">
+    <button class="mic-button" id="micButton" aria-label="질문하기">🎤</button>
+    <div class="hint" id="hint">눌러서 질문하기</div>
+  </div>
+
+<script>
+  // ---------- 시계 ----------
+  const clockEl = document.getElementById('clock');
+  const dateEl = document.getElementById('date');
+  function tick() {
+    const now = new Date();
+    clockEl.textContent = now.toLocaleTimeString('ko-KR', { hour12: false });
+    dateEl.textContent = now.toLocaleDateString('ko-KR', {
+      year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+    });
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  // ---------- 날씨/센서 컨텍스트 ----------
+  // 아래 값은 2026-09-18 기준 강원도 정선군 실측 스냅샷(구름많음, 21.2도)으로
+  // 페이지 제작 시점에 넣어둔 값입니다. 이 페이지는 정적 웹 데모라 CSP 정책상
+  // 외부 날씨 API를 직접 호출하지 못합니다. 실제 라즈베리파이 기기에서는
+  // 이 자리를 날씨 API 실시간 호출 + DHT22 온습도센서 값으로 교체하면 됩니다.
+  const mockContext = {
+    place: '강원도 정선군',
+    condition: '구름많음',
+    icon: '⛅',
+    temp: 21.2,
+    feelsLike: '20도',
+  };
+
+  document.getElementById('weatherIcon').textContent = mockContext.icon;
+  document.getElementById('weatherTemp').textContent = `${mockContext.temp}°C`;
+
+  // 실제 파이프라인에서는 이 자리에 Gemini API 호출이 들어갑니다.
+  // (질문 + 날씨 + 체감온도를 프롬프트로 전달해 추천 문장을 생성)
+  function generateAdvice(question) {
+    const q = question.toLowerCase();
+    if (q.includes('비') || q.includes('우산')) {
+      return `오늘 정선군은 ${mockContext.condition}, ${mockContext.temp}도예요. 우산보다는 가벼운 겉옷 하나면 충분해요.`;
+    }
+    return `오늘 정선군은 ${mockContext.condition}, 체감 ${mockContext.feelsLike}예요. 얇은 겉옷 하나 챙기면 좋겠어요.`;
+  }
+
+  // ---------- 음성 인식 (브라우저 내장 Web Speech API) ----------
+  const micButton = document.getElementById('micButton');
+  const statusEl = document.getElementById('status');
+  const questionEl = document.getElementById('question');
+  const answerEl = document.getElementById('answer');
+  const hintEl = document.getElementById('hint');
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function setListening(on) {
+    micButton.classList.toggle('listening', on);
+    statusEl.classList.toggle('listening', on);
+  }
+
+  if (!SpeechRecognition) {
+    statusEl.textContent = '이 브라우저는 음성 인식을 지원하지 않아요 (Chrome 권장)';
+    hintEl.textContent = '실제 라즈베리파이 기기에서는 Google STT로 동작합니다';
+    micButton.disabled = true;
+    micButton.style.opacity = 0.4;
+  } else {
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ko-KR';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    micButton.addEventListener('click', () => {
+      questionEl.textContent = '';
+      answerEl.textContent = '';
+      statusEl.textContent = '듣는 중...';
+      setListening(true);
+      hintEl.textContent = '말씀하세요';
+      try {
+        recognition.start();
+      } catch (e) {
+        // 연속 클릭 시 재시작 오류 방지
+      }
+    });
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      questionEl.textContent = `"${transcript}"`;
+      statusEl.textContent = '답변을 준비하고 있어요...';
+
+      // 실제 기기에서는 여기서 Gemini API 응답을 기다립니다 (약간의 지연 재현)
+      setTimeout(() => {
+        const advice = generateAdvice(transcript);
+        answerEl.textContent = advice;
+        statusEl.textContent = '';
+        hintEl.textContent = '다시 물어보려면 버튼을 눌러주세요';
+      }, 600);
+    };
+
+    recognition.onerror = () => {
+      statusEl.textContent = '음성을 인식하지 못했어요. 다시 시도해주세요.';
+      hintEl.textContent = '눌러서 질문하기';
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+    };
+  }
+</script>
+
+</body>
+</html>
